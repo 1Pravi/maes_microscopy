@@ -1,13 +1,10 @@
-# © Recursion Pharmaceuticals 2024
-import torch
-import torch.nn as nn
-
-
 class FourierLoss(nn.Module):
     def __init__(
         self,
         use_l1_loss: bool = True,
         num_multimodal_modalities: int = 1,  # set to 1 for vanilla MAE, 6 for channel-agnostic MAE
+        dynamic_weight: bool = False,  # Flag to enable dynamic loss weighting
+        initial_weight: float = 1.0  # Initial weight for Fourier loss
     ) -> None:
         """
         Fourier transform loss is only sound when using L1 or L2 loss to compare the frequency domains
@@ -21,6 +18,9 @@ class FourierLoss(nn.Module):
             nn.L1Loss(reduction="none") if use_l1_loss else nn.MSELoss(reduction="none")
         )
         self.num_modalities = num_multimodal_modalities
+        self.dynamic_weight = dynamic_weight
+        if dynamic_weight:
+            self.weight = nn.Parameter(torch.tensor(initial_weight))
 
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         # input = reconstructed image, target = original image
@@ -50,6 +50,9 @@ class FourierLoss(nn.Module):
         loss_tensor: torch.Tensor = self.loss(
             magnitude_reconstructed, magnitude_original
         )
+
+        if self.dynamic_weight:
+            loss_tensor *= self.weight
 
         if (
             flattened_images and not self.num_bins
